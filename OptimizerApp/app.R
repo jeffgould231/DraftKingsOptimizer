@@ -12,7 +12,7 @@ library(lpSolve)
 library(tidyverse)
 
 source("OptimizerFunction.R")
-Projections <- read_csv("ETRweek2Projections.csv")%>%
+Projections <- read_csv("Weekly DraftKings Main Slate Projections.csv") %>%
     rename(projection = `DK Projection`,
            position = `DK Position`,
            proj_own = `DK Ownership`,
@@ -57,11 +57,14 @@ ui <- fluidPage(
         sidebarPanel(
             #includeMarkdown("instructions.md"),
             selectInput("quarterback", "Choose QB (required):", choices = c(qb_list)),
-            sliderInput("stack_size", "Choose # of WRs/TEs to stack:", value = 1, min = 0, max = 2),
-            checkboxInput("run_it_back", "Stack with an opposing WR/TE?"),
-            selectInput("second_stack", "Choose a secondary game stack (optional):", 
-                        choices = c("None", secondary_games), selected = "None", multiple = TRUE),
-            sliderInput("overlap", "Maximum Number of Players lineups can share:", value = 4, min = 2, max = 6),
+            sliderInput("stack_size", "Choose # of Teammates to stack:", value = 1, min = 0, max = 2),
+            checkboxInput(inputId = "rb_stack_1", label = "Allow RB in stacks?"),
+            checkboxInput("run_it_back", "Stack with an opposing WR/TE?", value = TRUE),
+            selectInput("second_stack", "Choose a secondary game stack:", 
+                        choices = c(secondary_games), selected = "DALSEA", multiple = TRUE),
+            checkboxInput("rb_stack_2", "Allow RB in second stack?"),
+            sliderInput("overlap", "Maximum Number of Players lineups can share:", 
+                        value = 4, min = 2, max = 6, step = 1, round = T),
             numericInput("number_lineups", "How many lineups to make:", min = 10, max = 75, value = 20),
             checkboxGroupInput("stack_eligible", "Positions to Play in Flex:", 
                                choices = c("RB", "WR", "TE"), selected = c("RB", "WR"), inline = T),
@@ -83,11 +86,18 @@ ui <- fluidPage(
 server <- function(input, output) {
 
     output$lineup_table <- DT::renderDataTable({
-        make_lineups(qb = input$quarterback, n_lineups = input$number_lineups, slate = Projections,
-                     overlap = input$overlap, flex_eligible = input$stack_eligible,
-                     stack_size = input$stack_size, run_it_back = input$run_it_back, 
-                     exclude_players = input$exclude_players, max_proj_ownership = input$max_ownership,
-                     secondary_stack = input$second_stack)
+        make_lineups(qb = input$quarterback, 
+                     n_lineups = input$number_lineups, 
+                     #slate = Projections,
+                     overlap = input$overlap, 
+                     flex_eligible = input$stack_eligible,
+                     rb_in_stack1 = input$rb_stack_1,
+                     stack_size = input$stack_size, 
+                     run_it_back = input$run_it_back, 
+                     exclude_players = input$exclude_players, 
+                     max_proj_ownership = input$max_ownership,
+                     secondary_stack = input$second_stack,
+                     rb_in_stack2 = input$rb_stack_2)
     })
 }
 

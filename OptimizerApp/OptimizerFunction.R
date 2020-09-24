@@ -1,12 +1,38 @@
-make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, flex_eligible = c("RB", "WR"),
-                         stack_size = 1, run_it_back = T, exclude_players = NULL, max_proj_ownership = 125,
-                         secondary_stack = NULL, secondary_probs = NULL){
+make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB", "WR"),
+                         stack_size = 1, rb_in_stack1 = FALSE, run_it_back = T, exclude_players = NULL, 
+                         max_proj_ownership = 125,
+                         secondary_stack = NULL, secondary_probs = NULL, rb_in_stack2 = FALSE){
+  
+  slate <- read_csv("Weekly DraftKings Main Slate Projections.csv") %>%
+    rename(projection = `DK Projection`,
+           position = `DK Position`,
+           proj_own = `DK Ownership`,
+           salary = `DK Salary`) %>%
+    mutate(proj_own = as.numeric(str_extract(proj_own, "[:digit:]+")),
+           salary = as.numeric(str_extract(salary, "[:digit:]+"))) %>%
+    mutate(in_lineups = 0,
+           exclude = 0) %>%
+    drop_na() %>%
+    mutate(max_own = case_when(
+      position == "TE" ~ 15,
+      position == "WR" ~ 25,
+      position == "DST" ~ 15,
+      position == "RB" ~ 40,
+      position == "QB" ~ 30
+    ),
+    Player = case_when(
+      position == "DST" ~ str_c(Player, position, sep = " "),
+      TRUE ~ Player
+    )) %>%
+    mutate(game = ifelse(Team <= Opponent, str_c(Team, Opponent), str_c(Opponent,Team)),
+           store_projection = projection)
   
   lineup_portfolio <- data.frame(QB = c(), RB1 = c(), RB2 = c(), WR1 = c(), 
                                  WR2 = c(), WR3 = c(), TE = c(), FLEX = c(), DST = c(), Proj. = c())
   
-  if(secondary_stack == "None"){
-    secondary_stack = NULL}else if("None" %in% secondary_stack){
+  if(length(secondary_stack) == 1){
+    if(secondary_stack == "None"){secondary_stack = NULL}
+    }else if("None" %in% secondary_stack){
       secondary_stack = secondary_stack[secondary_stack != "None"]
     }
   
@@ -20,7 +46,10 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
   qb_team <- slate[slate$position == "QB",]$Team
   
   slate <- slate %>%
-    mutate(qb_stack = ifelse(position %in% c("WR", "TE") & Team == qb_team, 1, 0),
+    mutate(qb_stack = case_when(
+      position %in% c("WR", "TE") & Team == qb_team ~ 1, 
+      Team == qb_team & rb_in_stack1 == TRUE & position == "RB" ~ 1,
+      TRUE ~ 0),
            run_back = ifelse(position %in% c("WR", "TE") & Opponent == qb_team, 1, 0)) %>%
     filter(!(position == "DST" & (Opponent == qb_team | Team == qb_team)))%>%
     mutate(max_own = case_when(
@@ -52,6 +81,12 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
   
   for (lineup_num in 1:n_lineups) {
     
+    slate <- slate %>%
+      mutate(projection = case_when(
+        position == "DST" ~ rnorm(1, mean = store_projection, sd = 1.5) %>% round(1),
+        TRUE ~ store_projection
+      ))
+    
     if(lineup_num >= 4){## If a player is above our desired ownership level, exclude them from this round of rosters
       slate <- slate %>%
         mutate(exclude = ifelse(100*in_lineups / lineup_num >= max_own, 1, exclude)) 
@@ -64,11 +99,11 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
              max_proj_ownership, stack_size, as.numeric(run_it_back))
     ## Salary Cap, QB, RB, RB, WR, WR, TE, TE, DST, Ownership, qb_stack, run back
     
-    # if(lineup_num >= 2){ ## This step is to prevent any two lineups from having more than `overlap` players in common
-    #   dir <- c(dir, rep("<=", lineup_num-1)) ##  and append the lineups to our constrain matrix
-    #   rhs <- c(rhs, rep(overlap, lineup_num-1))
-    #   mat <- rbind(mat, lp_sol$solution)
-    # }
+    if(lineup_num >= 2){ ## This step is to prevent any two lineups from having more than `overlap` players in common
+      dir <- c(dir, rep("<=", lineup_num-1)) ##  and append the lineups to our constrain matrix
+      rhs <- c(rhs, rep(overlap, lineup_num-1))
+      mat <- rbind(mat, lp_sol$solution)
+    }
     
     mat <- rbind(mat, slate$exclude) ## Add excluded players to our constraints
     dir <- c(dir, "==")
@@ -82,6 +117,7 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
       slate <- slate %>%
         mutate(second_stack = case_when(
           game == game_stack_2 & position %in% c("WR", "TE") ~ 1,
+          game == game_stack_2 & rb_in_stack2 == T & position == "RB" ~ 1,
           TRUE ~ 0
         ))
       mat <- rbind(mat, slate$second_stack)
@@ -113,7 +149,7 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
     require(magrittr)
     return_lineup$Proj. = slate %>%  ### Take solution vector, transform into a human readable lineup
       mutate(in_lineup = lp_sol$solution) %>%
-      filter(in_lineup == 1) %$% sum(projection)
+      filter(in_lineup == 1) %$% sum(store_projection)
     
     slate$in_lineups = slate$in_lineups + lp_sol$solution ## Update rostership numbers
     slate$exclude = exclusion_vector ## reset exculsion to 0
@@ -121,13 +157,13 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
     lineup_portfolio <- bind_rows(lineup_portfolio, return_lineup) %>% 
       distinct() ## add current lineups to lineup portfolio
     
-    mat <- mat[1:(nrow(mat) - 2),] ## remove exclusion row from constraint matrix
+    mat <- mat[1:(nrow(mat) - 2),] ## remove exclusion row and secondary game stack from constraint matrix
     
-    dir <- c(dir, "<=") ##  and append the lineups to our constrain matrix
-    rhs <- c(rhs, overlap)
-    mat <- rbind(mat, lp_sol$solution)
-    
-    lineup_num <- nrow(lineup_portfolio)
+    # dir <- c(dir, "<=") ##  and append the lineups to our constrain matrix
+    # rhs <- c(rhs, overlap)
+    # mat <- rbind(mat, lp_sol$solution)
+    #lineup_num = lineup_num + 1
+    #lineup_num <- nrow(lineup_portfolio)
     
   }
   
@@ -135,3 +171,7 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
   
 }
 
+
+# View(make_lineups(qb = "Kyler Murray", slate = Projections, stack_size = 2, rb_in_stack1 = T,
+#              secondary_stack = c("BUFMIA", "ATLDAL"), secondary_probs = c(0.4, 0.6))
+# )

@@ -5,8 +5,9 @@ account: contestedcatch
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2874923
-bundleId: 3664316
+bundleId: 3666327
 url: https://contestedcatch.shinyapps.io/DraftKingsOptimizer/
-when: 1600915587.56976
+when: 1600957021.69138
 asMultiple: FALSE
 asStatic: FALSE
+ignoredFiles: ETRweek2Projections.csv

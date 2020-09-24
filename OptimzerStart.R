@@ -33,8 +33,9 @@ working_data <- week2
 overlap <- 3
 
 make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, flex_eligible = c("RB", "WR"),
-                         stack_size = 1, run_it_back = T, exclude_players = NULL, max_proj_ownership = 125,
-                         secondary_stack = NULL, secondary_probs = NULL){
+                         stack_size = 1, rb_in_stack1 = FALSE, run_it_back = T, exclude_players = NULL,
+                         max_proj_ownership = 125,
+                         secondary_stack = NULL, secondary_probs = NULL, rb_in_stack2 = FALSE){
   
   lineup_portfolio <- data.frame(QB = c(), RB1 = c(), RB2 = c(), WR1 = c(), 
                                  WR2 = c(), WR3 = c(), TE = c(), FLEX = c(), DST = c(), Proj. = c())
@@ -49,8 +50,11 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
   qb_team <- slate[slate$position == "QB",]$Team
   
   slate <- slate %>%
-    mutate(qb_stack = ifelse(position %in% c("WR", "TE") & Team == qb_team, 1, 0),
-           run_back = ifelse(position %in% c("WR", "TE") & Opponent == qb_team, 1, 0)) %>%
+    mutate(qb_stack = case_when(
+      position %in% c("WR", "TE") & Team == qb_team ~ 1, 
+      Team == qb_team & rb_in_stack1 == TRUE & position == "RB" ~ 1,
+      TRUE ~ 0),
+      run_back = ifelse(position %in% c("WR", "TE") & Opponent == qb_team, 1, 0)) %>%
     filter(!(position == "DST" & (Opponent == qb_team | Team == qb_team)))%>%
     mutate(max_own = case_when(
       Player == qb ~ 100,
@@ -111,6 +115,7 @@ make_lineups <- function(qb, n_lineups = 75, slate = working_data, overlap = 4, 
       slate <- slate %>%
         mutate(second_stack = case_when(
           game == game_stack_2 & position %in% c("WR", "TE") ~ 1,
+          game == game_stack_2 & rb_in_stack2 == T & position == "RB" ~ 1,
           TRUE ~ 0
         ))
       mat <- rbind(mat, slate$second_stack)
