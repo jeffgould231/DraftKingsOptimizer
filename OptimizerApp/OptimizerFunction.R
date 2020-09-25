@@ -157,7 +157,12 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
     lineup_portfolio <- bind_rows(lineup_portfolio, return_lineup) %>% 
       distinct() ## add current lineups to lineup portfolio
     
-    mat <- mat[1:(nrow(mat) - 2),] ## remove exclusion row and secondary game stack from constraint matrix
+    if(!is.null(secondary_stack)){
+      mat <- mat[1:(nrow(mat) - 2),]
+    }else{
+      mat <- mat[1:(nrow(mat) - 1),]
+    }
+     ## remove exclusion row and secondary game stack from constraint matrix
     
     # dir <- c(dir, "<=") ##  and append the lineups to our constrain matrix
     # rhs <- c(rhs, overlap)
