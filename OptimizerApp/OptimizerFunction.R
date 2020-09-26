@@ -3,6 +3,8 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
                          max_proj_ownership = 125,
                          secondary_stack = NULL, secondary_probs = NULL, rb_in_stack2 = FALSE){
   
+  set.seed(420)
+  
   slate <- read_csv("Weekly DraftKings Main Slate Projections.csv") %>%
     rename(projection = `DK Projection`,
            position = `DK Position`,
@@ -27,8 +29,12 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
     mutate(game = ifelse(Team <= Opponent, str_c(Team, Opponent), str_c(Opponent,Team)),
            store_projection = projection)
   
-  lineup_portfolio <- data.frame(QB = c(), RB1 = c(), RB2 = c(), WR1 = c(), 
+  lineup_portfolio_display <- data.frame(QB = c(), RB1 = c(), RB2 = c(), WR1 = c(), 
                                  WR2 = c(), WR3 = c(), TE = c(), FLEX = c(), DST = c(), Proj. = c())
+  
+  lineup_portfolio_export <- data.frame(QB = c(), RB1 = c(), RB2 = c(), WR1 = c(), 
+                                         WR2 = c(), WR3 = c(), TE = c(), FLEX = c(), DST = c(), Proj. = c())
+  
   
   if(length(secondary_stack) == 1){
     if(secondary_stack == "None"){secondary_stack = NULL}
@@ -128,7 +134,7 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
     
     lp_sol <- lp("max", obj, mat, dir, rhs, compute.sens = 1, all.bin = T) ## Solve for maximum projections
     
-    return_lineup <- slate %>%  ### Take solution vector, transform into a human readable lineup
+    return_lineup_display <- slate %>%  ### Take solution vector, transform into a human readable lineup
       mutate(in_lineup = lp_sol$solution) %>%
       filter(in_lineup == 1) %>%
       group_by(position) %>%
@@ -146,16 +152,38 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
       pivot_wider(names_from = position, values_from = Player) %>%
       select(QB, RB1, RB2, WR1, WR2, WR3, TE, FLEX, DST)
     
+    return_lineup_export <- slate %>%  ### Take solution vector, transform into a human readable lineup
+      mutate(in_lineup = lp_sol$solution) %>%
+      filter(in_lineup == 1) %>%
+      mutate(Player = str_c(Player, " (", DKSlateID, ")")) %>%
+      group_by(position) %>%
+      mutate(posRank = rank(-salary, ties.method = "first")) %>%
+      ungroup() %>%
+      mutate(position = case_when(
+        position == "RB" & posRank <=2 ~ str_c(position, posRank),
+        position == "WR" & posRank <=3 ~ str_c(position, posRank),
+        position == "RB"& posRank == 3 ~ "FLEX",
+        position == "WR" & posRank == 4 ~ "FLEX",
+        position == "TE" & posRank == 2 ~ "FLEX",
+        TRUE ~ position
+      )) %>%
+      select(Player, position) %>%
+      pivot_wider(names_from = position, values_from = Player) %>%
+      select(QB, RB1, RB2, WR1, WR2, WR3, TE, FLEX, DST)
+    
     require(magrittr)
-    return_lineup$Proj. = slate %>%  ### Take solution vector, transform into a human readable lineup
+    return_lineup_display$Proj. = slate %>%  ### Take solution vector, transform into a human readable lineup
       mutate(in_lineup = lp_sol$solution) %>%
       filter(in_lineup == 1) %$% sum(store_projection)
     
     slate$in_lineups = slate$in_lineups + lp_sol$solution ## Update rostership numbers
     slate$exclude = exclusion_vector ## reset exculsion to 0
     
-    lineup_portfolio <- bind_rows(lineup_portfolio, return_lineup) %>% 
+    lineup_portfolio_display <- bind_rows(lineup_portfolio_display, return_lineup_display) %>% 
       distinct() ## add current lineups to lineup portfolio
+    
+    lineup_portfolio_export <- bind_rows(lineup_portfolio_export, return_lineup_export) %>% 
+      distinct() 
     
     if(!is.null(secondary_stack)){
       mat <- mat[1:(nrow(mat) - 2),]
@@ -172,7 +200,8 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
     
   }
   
-  return(lineup_portfolio)
+  return(list(display = lineup_portfolio_display,
+              export = lineup_portfolio_export))
   
 }
 

@@ -77,6 +77,9 @@ ui <- fluidPage(
         
         # Show a plot of the generated distribution
         mainPanel(
+            fluidRow(
+                column(offset = 10, width = 3, downloadButton("downloadLineups", "Download"))),
+            tags$br(),
             DT::dataTableOutput("lineup_table")
         )
     )
@@ -85,20 +88,32 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
 
-    output$lineup_table <- DT::renderDataTable({
-        make_lineups(qb = input$quarterback, 
-                     n_lineups = input$number_lineups, 
-                     #slate = Projections,
-                     overlap = input$overlap, 
-                     flex_eligible = input$stack_eligible,
-                     rb_in_stack1 = input$rb_stack_1,
-                     stack_size = input$stack_size, 
-                     run_it_back = input$run_it_back, 
-                     exclude_players = input$exclude_players, 
-                     max_proj_ownership = input$max_ownership,
-                     secondary_stack = input$second_stack,
-                     rb_in_stack2 = input$rb_stack_2)
+    lineupList <- reactive({make_lineups(qb = input$quarterback, 
+                               n_lineups = input$number_lineups, 
+                               #slate = Projections,
+                               overlap = input$overlap, 
+                               flex_eligible = input$stack_eligible,
+                               rb_in_stack1 = input$rb_stack_1,
+                               stack_size = input$stack_size, 
+                               run_it_back = input$run_it_back, 
+                               exclude_players = input$exclude_players, 
+                               max_proj_ownership = input$max_ownership,
+                               secondary_stack = input$second_stack,
+                               rb_in_stack2 = input$rb_stack_2)
     })
+    
+    output$lineup_table <- DT::renderDataTable({
+        lineupList()$display
+    })
+    
+    output$downloadLineups <- downloadHandler(
+        filename = function() {
+            paste(input$quarterback, "_lineups.csv", sep = "")
+        },
+        content = function(file) {
+            write.csv(lineupList()$export, file, row.names = FALSE)
+        }
+    )
 }
 
 # Run the application 
