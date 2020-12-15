@@ -56,7 +56,7 @@ ui <- fluidPage(
     sidebarLayout(
         sidebarPanel(
             #includeMarkdown("instructions.md"),
-            selectInput("quarterback", "Choose QB (required):", choices = c(qb_list)),
+            selectInput("quarterback", "Choose QB (required):", choices = c(qb_list), selected = "Lamar Jackson"),
             sliderInput("stack_size", "Choose # of Teammates to stack:", value = 1, min = 0, max = 2),
             checkboxInput(inputId = "rb_stack_1", label = "Allow RB in stacks?"),
             checkboxInput("run_it_back", "Stack with an opposing WR/TE?", value = TRUE),

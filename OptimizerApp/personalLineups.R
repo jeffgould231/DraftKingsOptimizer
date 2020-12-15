@@ -32,7 +32,7 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 3, flex_eligible = c("RB"
       Player == "Alexander Mattison" ~ 20,
       Player == "Marquise Brown" ~ 10,
       Player == "Adrian Peterson" ~ 5,
-      Player == "Adam Humphries" ~ 5,
+      Player == "Adam Humphries" ~ 5
       TRUE ~ max_own
     )) %>%
     mutate(game = ifelse(Team <= Opponent, str_c(Team, Opponent), str_c(Opponent,Team)),
@@ -217,32 +217,33 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 3, flex_eligible = c("RB"
 }
 
 
-
+set.seed(1)
 qbs <- sample(
-  c(rep("Kyler Murray", 15), rep("Russell Wilson", 25), 
-    rep("Deshaun Watson", 25), rep("Justin Herbert", 15), rep("Josh Allen", 10),
-    rep("Patrick Mahomes", 15), rep("Ryan Tannehill", 15), rep("Cam Newton", 15), rep("Matt Ryan", 15))
+  c(rep("Russell Wilson", 20), rep("Aaron Rodgers", 20), rep("Patrick Mahomes", 15), 
+    rep("Justin Herbert", 20), rep("Tom Brady", 15), rep("Kyler Murray", 10),
+    rep("Kirk Cousins", 15), rep("Ryan Tannehill", 15), rep("Taysom Hill", 10), rep("Jalen Hurts", 10))
 )
 
 
 
-require_one_of <- c("Melvin Gordon III", "Antonio Gibson", "Latavius Murray", 
-                    "D'Andre Swift", "Tee Higgins", "DJ Moore", "Joshua Kelley", "Tyler Boyd",
-                    "A.J. Green")
+require_one_of <- c("Jonathon Taylor", "Nick Chubb", "DeVante Parker",  "Cam Akers", "DK Metcalf",
+                    "Miles Sanders",  "Henry Ruggs III", "Nelson Agholor", "A.J. Brown", "DeAndre Hopkins",
+                    "Marquez Valdes-Scantling")
+require_one_of <- slate$Player
 
 n_lineups = 150
 overlap = 3
 flex_eligible = c("RB", "WR")
-stack_size = 2
+stack_size = 1
 rb_in_stack1 = T
 run_it_back = T
-exclude_players = c("Panthers", "Broncos", "Texans", "Raiders")
+exclude_players = c("Larry Fitzgerald", "Jeff Smith")
 max_proj_ownership = 145
-secondary_stack = c("ARISEA", "CARNO", "GBHOU", "ATLDET", "PITTEN")
+secondary_stack = c("DETGB", "JAXTEN", "KCMIA", "CINDAL", "ATLLAC", "MINTB", "NOPHI", "INDLV", "CHIHOU")
 secondary_probs = NULL
 rb_in_stack2 = TRUE
   
-  set.seed(420)
+set.seed(420)
   
   slate <- read_csv("Weekly DraftKings Main Slate Projections.csv") %>%
     rename(projection = `DK Projection`,
@@ -250,29 +251,37 @@ rb_in_stack2 = TRUE
            proj_own = `DK Ownership`,
            salary = `DK Salary`) %>%
     filter(!(str_detect(Player, "N/A"))) %>%
-    mutate(proj_own = parse_number(proj_own),
-           salary = parse_number(salary)) %>%
+    # mutate(proj_own = parse_number(proj_own),
+    #        salary = parse_number(salary)) %>%
     #mutate(salary = as.numeric(str_remove(salary, "\\,"))) %>%
     mutate(in_lineups = 0,
            exclude = 0) %>%
     drop_na() %>%
     mutate(max_own = case_when(
-      position == "TE" ~ 15,
-      position == "WR" ~ 22.5,
-      position == "DST" ~ 15,
-      position == "RB" ~ 32.5,
-      position == "QB" ~ 50
+      position == "TE" ~ 12.5,
+      position == "WR" ~ 20,
+      position == "DST" ~ 8.5,
+      position == "RB" ~ 27.5,
+      position == "QB" ~ 100
     ),
     Player = case_when(
       position == "DST" ~ str_c(Player, position, sep = " "),
       TRUE ~ Player
     )) %>%
     mutate(max_own = case_when(
-      Player == "Giovani Bernard" ~ 15,
-      Player == "Jamaal Williams" ~ 12.5,
-      Player == "Gabriel Davis" ~ 7.5,
+      Player == "Braxton Berrios" ~ 5,
+      Player == "Breshad Perriman" ~ 7.5,
+      Player == "Keke Coutee" ~ 15,
+      Player == "Chad Hansen" ~ 7,
+      Player == "DeAndre Washington" ~ 15,
+      Player == "J.D. McKissic" ~ 12.5,
+      Player == "Zach Ertz" ~ 2,
+      Player == "Duke Johnson" ~ 12.5,
+      Player == "Giovani Bernard" ~ 12.5,
+      Player %in% c("Michael Gallup", "Curtis Samuel") ~ 15,
+      Player == "KJ Hamler" ~ 7.5,
       TRUE ~ max_own
-    ),
+     ),
     require_one = case_when(
       Player %in% require_one_of ~ 1,
       TRUE ~ 0
@@ -310,11 +319,12 @@ rb_in_stack2 = TRUE
   
   
   slate_work <- slate_work %>%
+    rowwise() %>%
     mutate(projection = case_when(
-      #position == "DST" ~ rnorm(1, mean = store_projection, sd = 1.5) %>% round(1),
-      position == "DST" ~ rexp(1, 1/store_projection) %>% round(1),
+      position == "DST" ~ rnorm(1, mean = store_projection, sd = sqrt(store_projection)/2) %>% round(1),
       TRUE ~ store_projection
-    ))
+    )) %>%
+    ungroup()
   
   mat <- matrix(c(
     slate_work$salary,
@@ -339,11 +349,30 @@ for (lineup_num in 1:n_lineups){
     
   qb <- qbs[lineup_num]  
     
-  run_it_back = ifelse(qb %in% c("Patrick Mahomes", "Josh Allen"), sample(c(TRUE, FALSE), 1, prob = c(2/3, 1/3)), TRUE)
+  #run_it_back = ifelse(qb %in% c("Patrick Mahomes", "Josh Allen"), sample(c(TRUE, FALSE), 1, prob = c(2/3, 1/3)), TRUE)
   
   slate_work <- slate 
   
   qb_team <- slate_work[slate_work$Player == qb,]$Team
+  
+  if(qb %in% c("Tayson Hill", "Jalen Hurts")){
+    stack_size = 1
+  }else if(qb %in% c("Tom Brady", "Aaron Rodgers", "Kirk Cousins", "Patrick Mahomes")){
+    stack_size = sample(c(1,2), size = 1, prob = c(0.25, 0.75))
+  }else{
+    stack_size = sample(c(1,2), size = 1, prob = c(0.5, 0.5))
+  }
+  #if(qb %in% c("Matt Ryan", "Andy Dalton")) stack_size == 2
+  
+  rb_in_stack1 = !(qb %in% c("Taysom Hill", "Jalen Hurts", "Russell Wilson", "Kyler Murray"))
+  
+  #rb_in_stack1 = !(qb %in% c("Josh Allen", "Ben Roethlisberger", "Andy Dalton", "Jared Goff", "Tua Tagovailoa"))
+  
+  # run_it_back = if(qb %in% c("Russell Wilson")){
+  #   sample(c(T,F), size = 1, prob = c(0.75, 0.25))
+  # }else{
+  #   run_it_back = T
+  # }
   
   slate_work <- slate_work %>%
     mutate(qb_stack = case_when(
@@ -358,17 +387,22 @@ for (lineup_num in 1:n_lineups){
       TRUE ~ exclude
     )) %>%
     mutate(run_back = case_when(
-      Player == "Melvin Gordon" & qb == "Patrick Mahomes" ~ 1,
+      Player == "James Robinson" & qb == "Ryan Tannehill" ~ 1,
+      Player == "DeAndre Washington" & qb == "Patrick Mahomes" ~ 1,
+      Player == "D'Andre Swift" & qb == "Aaron Rodgers" ~ 1,
       TRUE ~ run_back
     ))
   
 
-    slate_work <- slate_work %>%
-      mutate(projection = case_when(
-        #position == "DST" ~ rnorm(1, mean = store_projection, sd = 1.5) %>% round(1),
-        position == "DST" ~ rexp(1, 1/store_projection) %>% round(1),
-        TRUE ~ store_projection
-      ))
+  slate_work <- slate_work %>%
+    rowwise() %>%
+    mutate(projection = case_when(
+      #position == "DST" ~ rnorm(1, mean = store_projection, sd = 1.5) %>% round(1),
+      #position == "DST" ~ rexp(1, 1/store_projection) %>% round(1),
+      position == "DST" ~ rnorm(1, mean = store_projection, sd = sqrt(store_projection)/2) %>% round(1),
+      TRUE ~ store_projection
+    )) %>%
+    ungroup()
     
     if(lineup_num >= 10){## If a player is above our desired ownership level, exclude them from this round of rosters
       slate_work <- slate_work %>%
@@ -397,15 +431,21 @@ for (lineup_num in 1:n_lineups){
       mat <- rbind(mat, lp_sol$solution)
     }
     
-    mat <- rbind(mat, slate_work$exclude) ## Add excluded players to our constraints
-    dir <- c(dir, "==")
-    rhs <- c(rhs, 0)
-    
     if(!is.null(secondary_stack)){
       if(is.null(secondary_probs)) {
         secondary_probs <- rep(1/length(secondary_stack), length(secondary_stack))
       }
       game_stack_2 = sample(secondary_stack, 1, prob = secondary_probs)
+      
+      if(game_stack_2  == "DALMIN"){
+        slate_work$exclude[slate_work$Player == "Ezekiel Elliot"] =  1
+      }
+    
+    mat <- rbind(mat, slate_work$exclude) ## Add excluded players to our constraints
+    dir <- c(dir, "==")
+    rhs <- c(rhs, 0)
+    
+
       
       if(rb_in_stack2 == T){
         slate_work <- slate_work %>%
@@ -506,7 +546,7 @@ for (lineup_num in 1:n_lineups){
 }
 
 
-
+lineups <- lineup_portfolio_display
 RB1s <- lineups %>%
   group_by(RB1) %>%
   summarise(rosters = n()) %>%
@@ -522,7 +562,9 @@ RB3s <- lineups %>%
 RBs <- bind_rows(RB1s, RB2s, RB3s) %>%
   group_by(RB) %>%
   summarise(rosters = sum(rosters)) %>%
-  mutate(ownership = rosters / 150)
+  mutate(ownership = rosters / 150) %>%
+  left_join(select(slate, Player, position), by = c("RB" = "Player")) %>%
+  filter(position == "RB")
 
 WR1s <- lineups %>%
   group_by(WR1) %>%
@@ -536,14 +578,16 @@ WR3s <- lineups %>%
   group_by(WR3) %>%
   summarise(rosters = n()) %>%
   rename(WR = WR3)
-WR3s <- lineups %>%
+WR4s <- lineups %>%
   group_by(FLEX) %>%
   summarise(rosters = n()) %>%
   rename(WR = FLEX)
-WRs <- bind_rows(WR1s, WR2s, WR3s) %>%
+WRs <- bind_rows(WR1s, WR2s, WR3s, WR4s) %>%
   group_by(WR) %>%
   summarise(rosters = sum(rosters)) %>%
-  mutate(ownership = rosters / 150)
+  mutate(ownership = rosters / 150) %>%
+  left_join(select(slate, Player, position, Team), by = c("WR" = "Player")) %>%
+  filter(position == "WR")
 
 TEs <- lineups %>%
   group_by(TE) %>%
@@ -556,5 +600,5 @@ lineups_final <- lineups %>%
   filter(!(str_detect(WR3, "John Brown") & str_detect(TE, "Knox|Kroft"))) %>%
   filter(!(str_detect(QB, "Dak Prescott") & str_detect(RB1, "Ezekiel Elliott")))
 
-write_csv(lineup_portfolio_display, "DK_week7_entries_display.csv")
-write_csv(lineup_portfolio_export, "DK_week7_entries.csv")
+write_csv(lineup_portfolio_display, "DK_week13_entries_display.csv")
+write_csv(lineup_portfolio_export, "DK_week13_entries.csv")

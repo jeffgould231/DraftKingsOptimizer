@@ -10,8 +10,10 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
            position = `DK Position`,
            proj_own = `DK Ownership`,
            salary = `DK Salary`) %>%
-    mutate(proj_own = as.numeric(str_extract(proj_own, "[:digit:]+")),
-           salary = as.numeric(str_extract(salary, "[:digit:]+"))) %>%
+    filter(!(str_detect(Player, "N/A"))) %>%
+    # mutate(proj_own = parse_number(proj_own),
+    #        salary = parse_number(salary)) %>%
+    #mutate(salary = as.numeric(str_remove(salary, "\\,"))) %>%
     mutate(in_lineups = 0,
            exclude = 0) %>%
     drop_na() %>%
@@ -19,7 +21,7 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
       position == "TE" ~ 15,
       position == "WR" ~ 25,
       position == "DST" ~ 15,
-      position == "RB" ~ 40,
+      position == "RB" ~ 30,
       position == "QB" ~ 30
     ),
     Player = case_when(
@@ -88,10 +90,12 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
   for (lineup_num in 1:n_lineups) {
     
     slate <- slate %>%
+      rowwise() %>%
       mutate(projection = case_when(
-        position == "DST" ~ rnorm(1, mean = store_projection, sd = 1.5) %>% round(1),
+        #position == "DST" ~ rnorm(1, mean = store_projection, sd = 1.5) %>% round(1),
+        position == "DST" ~ rexp(1, 1/store_projection) %>% round(1),
         TRUE ~ store_projection
-      ))
+      )) %>% ungroup()
     
     if(lineup_num >= 4){## If a player is above our desired ownership level, exclude them from this round of rosters
       slate <- slate %>%
@@ -120,14 +124,32 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
         secondary_probs <- rep(1/length(secondary_stack), length(secondary_stack))
       }
       game_stack_2 = sample(secondary_stack, 1, prob = secondary_probs)
-      slate <- slate %>%
-        mutate(second_stack = case_when(
-          game == game_stack_2 & position %in% c("WR", "TE") ~ 1,
-          game == game_stack_2 & rb_in_stack2 == T & position == "RB" ~ 1,
-          TRUE ~ 0
-        ))
+      
+      if(rb_in_stack2 == T){
+        slate <- slate %>%
+          mutate(second_stack = case_when(
+            game == game_stack_2 & position %in% c("RB", "WR", "TE") ~ 1,
+            TRUE ~ 0
+          ))
+      }
+      
+      if(rb_in_stack2 == F){
+        slate <- slate %>%
+          mutate(second_stack = case_when(
+            game == game_stack_2 & position %in% c("RB", "WR", "TE") ~ 1,
+            TRUE ~ 0
+          ))
+      }
+      
+      # slate <- slate %>%
+      #   mutate(second_stack = case_when(
+      #     game == game_stack_2 & position %in% c("WR", "TE") ~ 1,
+      #     game == game_stack_2 & rb_in_stack2 == T & position == "RB" ~ 1,
+      #     TRUE ~ 0
+      #   ))
+      
       mat <- rbind(mat, slate$second_stack)
-      dir <- c(dir, "==")
+      dir <- c(dir, ">=")
       rhs <- c(rhs, 2)
     }
     
@@ -156,6 +178,7 @@ make_lineups <- function(qb, n_lineups = 75, overlap = 4, flex_eligible = c("RB"
       mutate(in_lineup = lp_sol$solution) %>%
       filter(in_lineup == 1) %>%
       mutate(Player = str_c(Player, " (", DKSlateID, ")")) %>%
+      mutate(Player = str_remove(Player, " DST")) %>%
       group_by(position) %>%
       mutate(posRank = rank(-salary, ties.method = "first")) %>%
       ungroup() %>%
